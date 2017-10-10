@@ -9,14 +9,28 @@
 / Function Configurations
 /---------------------------------------------------------------------------*/
 
+#ifndef _USE_READ
 #define	_USE_READ	1	/* Enable pf_read() function */
+#endif
+#ifndef _USE_DIR
 #define	_USE_DIR	1	/* Enable pf_opendir() and pf_readdir() function */
+#endif
+#ifndef _USE_LSEEK
 #define	_USE_LSEEK	1	/* Enable pf_lseek() function */
+#endif
+#ifndef _USE_WRITE
 #define	_USE_WRITE	1	/* Enable pf_write() function */
+#endif
 
+#ifndef _FS_FAT12
 #define _FS_FAT12	1	/* Enable FAT12 */
+#endif
+#ifndef _FS_FAT16
 #define _FS_FAT16	1	/* Enable FAT16 */
+#endif
+#ifndef _FS_FAT32
 #define _FS_FAT32	1	/* Enable FAT32 */
+#endif
 
 
 /*---------------------------------------------------------------------------/

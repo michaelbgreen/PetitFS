@@ -5,10 +5,14 @@
 #include "integer.h"
 
 // SD chip select pin
+#ifndef SD_CS_PIN
 #define SD_CS_PIN 10
+#endif
 
 // Use SPI SCK divisor of 2 if nonzero else 4.
+#ifndef SPI_FCPU_DIV_2
 #define SPI_FCPU_DIV_2 1
+#endif
 //------------------------------------------------------------------------------
 #define	FORWARD(d)	xmit(d)				/* Data forwarding function (console out) */
 static void xmit(char d) {}  // Dummy write console
