@@ -68,6 +68,6 @@ class PetitSerial : public Print {
     return 1;
   }
 };
-#endif defined(UDR0) || defined(DOXYGEN)
+#endif  // defined(UDR0) || defined(DOXYGEN)
 #endif  // PetitSerial_h
 
