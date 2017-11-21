@@ -89,7 +89,9 @@ typedef enum {
 	FR_NO_FILE,			/* 3 */
 	FR_NOT_OPENED,		/* 4 */
 	FR_NOT_ENABLED,		/* 5 */
-	FR_NO_FILESYSTEM	/* 6 */
+	FR_NO_FILESYSTEM,	/* 6 */
+	FR_INVALID_SIZE,    /* 7 */
+	FR_PENDING,			/* 8 */
 } FRESULT;
 
 
@@ -105,6 +107,8 @@ FRESULT pf_lseek (DWORD ofs);								/* Move file pointer of the open file */
 FRESULT pf_opendir (DIR* dj, const char* path);				/* Open a directory */
 FRESULT pf_readdir (DIR* dj, FILINFO* fno);					/* Read a directory item from the open directory */
 
+FRESULT pf_write_async (const void* buff, UINT btw, UINT* bw); /* Write data to the open file, non-blocking */
+FRESULT pf_write_check (); 									/* Check for completion of non-blocking write */
 
 
 /*--------------------------------------------------------------*/
@@ -114,7 +118,8 @@ FRESULT pf_readdir (DIR* dj, FILINFO* fno);					/* Read a directory item from th
 
 #define	FA_OPENED	0x01
 #define	FA_WPRT		0x02
-#define	FA__WIP		0x40
+#define	FA__WIP		0x40  /* started sector write */
+#define	FA__FIP		0x80  /* finalizing sector write */
 
 
 /* FAT sub type (FATFS.fs_type) */

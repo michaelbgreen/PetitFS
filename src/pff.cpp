@@ -935,6 +935,8 @@ FRESULT pf_write (
 	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
 	if (!(fs->flag & FA_OPENED))		/* Check if opened */
 		return FR_NOT_OPENED;
+	if (fs->flag & FA__FIP)				/* Check if last write finalized */
+		return FR_NOT_READY;
 
 	if (!btw) {		/* Finalize request */
 		if ((fs->flag & FA__WIP) && disk_writep(0, 0)) ABORT(FR_DISK_ERR);
@@ -975,6 +977,83 @@ FRESULT pf_write (
 		}
 	}
 
+	return FR_OK;
+}
+
+FRESULT pf_write_async (
+	const void* buff,	/* Pointer to the data to be written */
+	UINT btw,			/* Number of bytes to write, <= 512 */
+	UINT* bw			/* Pointer to number of bytes written */
+)
+{
+	CLUST clst;
+	DWORD sect, remain;
+	const BYTE *p = (BYTE*)buff;  // whg
+	BYTE cs;
+	UINT wcnt;
+	FATFS *fs = FatFs;
+
+
+	*bw = 0;
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (!(fs->flag & FA_OPENED))		/* Check if opened */
+		return FR_NOT_OPENED;
+	if (fs->flag & FA__FIP)				/* Check if last write finalized */
+		return FR_NOT_READY;
+
+	if (!(fs->flag & FA__WIP))		/* Round-down fptr to the sector boundary */
+		fs->fptr &= 0xFFFFFE00;
+
+	remain = fs->fsize - fs->fptr;
+	if (btw > remain) btw = (UINT)remain;			/* Truncate btw by remaining bytes */
+
+	wcnt = 512 - (UINT)fs->fptr % 512;				/* Number of bytes to write to the sector */
+	if (btw > wcnt) return FR_INVALID_SIZE;			/* Async write can't cross sector boundary */
+	
+	if ((UINT)fs->fptr % 512 == 0) {			/* On the sector boundary? */
+		if (fs->flag & FA__WIP) return FR_INVALID_SIZE;	/* Async write can't cross sector boundary */
+		cs = (BYTE)(fs->fptr / 512 & (fs->csize - 1));	/* Sector offset in the cluster */
+		if (!cs) {								/* On the cluster boundary? */
+			if (fs->fptr == 0)					/* On the top of the file? */
+				clst = fs->org_clust;
+			else
+				clst = get_fat(fs->curr_clust);
+			if (clst <= 1) ABORT(FR_DISK_ERR);
+			fs->curr_clust = clst;				/* Update current cluster */
+		}
+		sect = clust2sect(fs->curr_clust);		/* Get current sector */
+		if (!sect) ABORT(FR_DISK_ERR);
+		fs->dsect = sect + cs;
+		if (disk_writep_initiate(fs->dsect)) ABORT(FR_DISK_ERR);	/* Initiate a sector write operation */
+		fs->flag |= FA__WIP;
+	}
+	if (wcnt > btw) wcnt = btw;
+	if (disk_writep_data(p, wcnt)) ABORT(FR_DISK_ERR);	/* Send data to the sector */
+	fs->fptr += wcnt; p += wcnt;				/* Update pointers and counters */
+	btw -= wcnt; *bw += wcnt;
+
+	return FR_OK;
+}
+
+FRESULT pf_write_check (
+)
+{
+	DRESULT dr;
+	FATFS *fs = FatFs;
+
+	if (fs->flag & FA__FIP) {
+		dr = disk_writep_finalize_check();
+		if (RES_PENDING == dr) {
+			return FR_PENDING;
+		}
+		if (dr) ABORT(FR_DISK_ERR);
+		fs->flag &= ~FA__FIP;
+	} else if (fs->flag & FA__WIP) {
+		if (disk_writep_finalize_async()) return FR_DISK_ERR;
+		fs->flag = (fs->flag & ~FA__WIP) | FA__FIP;
+		return FR_PENDING;
+	}
+	
 	return FR_OK;
 }
 #endif

@@ -219,42 +219,135 @@ DRESULT disk_readp (
 /*-----------------------------------------------------------------------*/
 
 #if _USE_WRITE
+static UINT SectorWriteCounter;
+static UINT AsyncWriteCheckCount;
+
+DRESULT disk_writep_initiate (
+	DWORD sc			/* Sector number (LBA) */
+)
+{
+	DRESULT res;
+	UINT bc;
+
+	res = RES_ERROR;
+	AsyncWriteCheckCount = 0;
+
+	if (sc) {	/* Initiate sector write process */
+		if (!(CardType & CT_BLOCK)) sc *= 512;	/* Convert to byte address if needed */
+		if (send_cmd(CMD24, sc) == 0) {			/* WRITE_SINGLE_BLOCK */
+			xmit_spi(0xFF); xmit_spi(0xFE);		/* Data block header */
+			SectorWriteCounter = 512;			/* Set byte counter */
+			res = RES_OK;
+		}
+	}
+
+	if (RES_OK != res) {
+		DESELECT();
+		rcv_spi();
+	}
+
+	return res;
+}
+
+DRESULT disk_writep_data (
+	const BYTE *buff,	/* Pointer to the bytes to be written */
+	DWORD sc			/* Number of bytes to send */
+)
+{
+	UINT bc;
+
+	bc = sc;
+	while (bc && SectorWriteCounter) {		/* Send data bytes to the card */
+		xmit_spi(*buff++);
+		SectorWriteCounter--; bc--;
+	}
+
+	return RES_OK;
+}
+
+DRESULT disk_writep_finalize_async (
+)
+{
+	DRESULT res;
+	UINT bc;
+
+	res = RES_ERROR;
+	
+	/* Finalize sector write process */
+	bc = SectorWriteCounter + 2;
+	while (bc--) xmit_spi(0);	/* Fill left bytes and CRC with zeros */
+	if ((rcv_spi() & 0x1F) == 0x05) {	/* Receive data resp and wait for end of write process in timeout of 500ms */
+		AsyncWriteCheckCount = 5000;  /* timeout of 500ms, 100us poll interval */
+		res = RES_OK;
+	}
+
+	if (RES_OK != res) {
+		DESELECT();
+		rcv_spi();
+	}
+	
+	return res;
+}
+
+DRESULT disk_writep_finalize_check (
+)
+{
+	DRESULT res;
+	UINT bc;
+
+	res = RES_ERROR;
+
+	if (rcv_spi() == 0xFF) {
+		res = RES_OK;
+	} else if (AsyncWriteCheckCount) {  /* Wait for ready */
+		AsyncWriteCheckCount--;
+		res = RES_PENDING;
+	}
+
+	if (RES_PENDING != res) {
+		DESELECT();
+		rcv_spi();
+	}
+
+	return res;
+}
+
+DRESULT disk_writep_finalize (
+)
+{
+	DRESULT res;
+
+	res = disk_writep_finalize_async();
+	if (RES_OK == res) {
+		while (1) {
+			res = disk_writep_finalize_check();
+			if (RES_PENDING == res) {
+				dly_100us();
+			} else {
+				break;
+			}
+		}
+	}
+
+	return res;
+}
+
 DRESULT disk_writep (
 	const BYTE *buff,	/* Pointer to the bytes to be written (NULL:Initiate/Finalize sector write) */
 	DWORD sc			/* Number of bytes to send, Sector number (LBA) or zero */
 )
 {
 	DRESULT res;
-	UINT bc;
-	static UINT wc;	/* Sector write counter */
 
 	res = RES_ERROR;
 
 	if (buff) {		/* Send data bytes */
-		bc = sc;
-		while (bc && wc) {		/* Send data bytes to the card */
-			xmit_spi(*buff++);
-			wc--; bc--;
-		}
-		res = RES_OK;
+		res = disk_writep_data(buff, sc);
 	} else {
 		if (sc) {	/* Initiate sector write process */
-			if (!(CardType & CT_BLOCK)) sc *= 512;	/* Convert to byte address if needed */
-			if (send_cmd(CMD24, sc) == 0) {			/* WRITE_SINGLE_BLOCK */
-				xmit_spi(0xFF); xmit_spi(0xFE);		/* Data block header */
-				wc = 512;							/* Set byte counter */
-				res = RES_OK;
-			}
+			res = disk_writep_initiate(sc);
 		} else {	/* Finalize sector write process */
-			bc = wc + 2;
-			while (bc--) xmit_spi(0);	/* Fill left bytes and CRC with zeros */
-			if ((rcv_spi() & 0x1F) == 0x05) {	/* Receive data resp and wait for end of write process in timeout of 500ms */
-				for (bc = 5000; rcv_spi() != 0xFF && bc; bc--)	/* Wait for ready */
-					dly_100us();
-				if (bc) res = RES_OK;
-			}
-			DESELECT();
-			rcv_spi();
+			res = disk_writep_finalize();
 		}
 	}
 

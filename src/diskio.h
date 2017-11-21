@@ -21,7 +21,8 @@ typedef enum {
 	RES_OK = 0,		/* 0: Function succeeded */
 	RES_ERROR,		/* 1: Disk error */
 	RES_NOTRDY,		/* 2: Not ready */
-	RES_PARERR		/* 3: Invalid parameter */
+	RES_PARERR,		/* 3: Invalid parameter */
+	RES_PENDING,	/* 4: Async operation pending */
 } DRESULT;
 
 
@@ -31,6 +32,15 @@ typedef enum {
 DSTATUS disk_initialize (void);
 DRESULT disk_readp (BYTE* buff, DWORD sector, UINT offset, UINT count);
 DRESULT disk_writep (const BYTE* buff, DWORD sc);
+
+// SPI transaction is terminated on failure.
+DRESULT disk_writep_initiate (DWORD sc);
+// Must call disk_writep_finalize, success or failure.
+DRESULT disk_writep_data (const BYTE *buff,	DWORD sc);
+DRESULT disk_writep_finalize ();
+
+DRESULT disk_writep_finalize_async ();
+DRESULT disk_writep_finalize_check ();
 
 #define STA_NOINIT		0x01	/* Drive not initialized */
 #define STA_NODISK		0x02	/* No medium in the drive */
