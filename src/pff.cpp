@@ -908,6 +908,68 @@ FRESULT pf_read (
 
 	return FR_OK;
 }
+
+FRESULT pf_read_async (
+	UINT btr,		/* Number of bytes to read */
+	UINT* br		/* Pointer to actual number of bytes to read (pass to pf_read_check) */
+)
+{
+	DRESULT dr;
+	CLUST clst;
+	DWORD sect, remain;
+	UINT rcnt;
+	BYTE cs;
+	FATFS *fs = FatFs;
+
+
+	*br = 0;
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (!(fs->flag & FA_OPENED))		/* Check if opened */
+		return FR_NOT_OPENED;
+
+	remain = fs->fsize - fs->fptr;
+	if (btr > remain) btr = (UINT)remain;			/* Truncate btr by remaining bytes */
+	rcnt = 512 - (UINT)fs->fptr % 512;				/* Get partial sector data from sector buffer */
+	if (btr > rcnt) return FR_INVALID_SIZE;			/* Async read can't cross sector boundary */
+	
+	if ((fs->fptr % 512) == 0) {					/* On the sector boundary? */
+		cs = (BYTE)(fs->fptr / 512 & (fs->csize - 1));	/* Sector offset in the cluster */
+		if (!cs) {									/* On the cluster boundary? */
+			if (fs->fptr == 0)						/* On the top of the file? */
+				clst = fs->org_clust;
+			else
+				clst = get_fat(fs->curr_clust);
+			if (clst <= 1) ABORT(FR_DISK_ERR);
+			fs->curr_clust = clst;					/* Update current cluster */
+		}
+		sect = clust2sect(fs->curr_clust);			/* Get current sector */
+		if (!sect) ABORT(FR_DISK_ERR);
+		fs->dsect = sect + cs;
+	}
+	if (rcnt > btr) rcnt = btr;
+	dr = disk_readp_async(fs->dsect);
+	if (dr) ABORT(FR_DISK_ERR);
+	*br += rcnt;
+
+	return FR_OK;
+}
+
+FRESULT pf_read_check (
+	void* buff,		/* Pointer to the read buffer (NULL:Forward data to the stream)*/
+	UINT btr		/* Number of bytes to read */
+)
+{
+	DRESULT dr;
+	FATFS *fs = FatFs;
+
+	dr = disk_readp_check(buff, (UINT)fs->fptr % 512, btr);
+	if (RES_PENDING == dr) return FR_PENDING;
+	if (dr) ABORT(FR_DISK_ERR);
+	fs->fptr += btr;
+
+	return FR_OK;
+}
+
 #endif
 
 
@@ -1043,9 +1105,7 @@ FRESULT pf_write_check (
 
 	if (fs->flag & FA__FIP) {
 		dr = disk_writep_finalize_check();
-		if (RES_PENDING == dr) {
-			return FR_PENDING;
-		}
+		if (RES_PENDING == dr) return FR_PENDING;
 		if (dr) ABORT(FR_DISK_ERR);
 		fs->flag &= ~FA__FIP;
 	} else if (fs->flag & FA__WIP) {

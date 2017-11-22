@@ -30,7 +30,12 @@ typedef enum {
 /* Prototypes for disk control functions */
 
 DSTATUS disk_initialize (void);
+
 DRESULT disk_readp (BYTE* buff, DWORD sector, UINT offset, UINT count);
+
+DRESULT disk_readp_async (DWORD sector);
+DRESULT disk_readp_check (BYTE *buff, UINT offset, UINT count);
+
 DRESULT disk_writep (const BYTE* buff, DWORD sc);
 
 // SPI transaction is terminated on failure.

@@ -212,6 +212,79 @@ DRESULT disk_readp (
 	return res;
 }
 
+static UINT AsyncReadCheckCounter;
+
+DRESULT disk_readp_async (
+	DWORD sector	/* Sector number (LBA) */
+)
+{
+	DRESULT res;
+	BYTE rc;
+	UINT bc;
+
+
+	if (!(CardType & CT_BLOCK)) sector *= 512;	/* Convert to byte address if needed */
+
+	res = RES_ERROR;
+	if (send_cmd(CMD17, sector) == 0) {	/* READ_SINGLE_BLOCK */
+		AsyncReadCheckCounter = 40000;	/* Time counter */
+		res = RES_OK;
+	}
+
+	if (RES_OK != res) {
+		DESELECT();
+		rcv_spi();
+	}
+
+	return res;
+}
+
+DRESULT disk_readp_check (
+	BYTE *buff,		/* Pointer to the read buffer (NULL:Forward to the stream) */
+	UINT offset,	/* Byte offset to read from (0..511) */
+	UINT count		/* Number of bytes to read (ofs + cnt mus be <= 512) */
+)
+{
+	DRESULT res;
+	BYTE rc;
+	UINT bc;
+
+	res = RES_ERROR;
+	rc = rcv_spi();
+	if (rc == 0xFF && --AsyncReadCheckCounter) {	/* Wait for data packet */
+		res = RES_PENDING;
+	} else if (rc == 0xFE) {	/* A data packet arrived */
+
+		bc = 512 + 2 - offset - count;	/* Number of trailing bytes to skip */
+
+		/* Skip leading bytes */
+		while (offset--) rcv_spi();
+
+		/* Receive a part of the sector */
+		if (buff) {	/* Store data to the memory */
+			do {
+				*buff++ = rcv_spi();
+			} while (--count);
+		} else {	/* Forward data to the outgoing stream */
+			do {
+				FORWARD(rcv_spi());
+			} while (--count);
+		}
+
+		/* Skip trailing bytes and CRC */
+		do rcv_spi(); while (--bc);
+
+		res = RES_OK;
+	}
+
+	if (RES_PENDING != res) {
+		DESELECT();
+		rcv_spi();
+	}
+
+	return res;
+}
+
 
 
 /*-----------------------------------------------------------------------*/
