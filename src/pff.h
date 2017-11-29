@@ -107,9 +107,11 @@ FRESULT pf_lseek (DWORD ofs);								/* Move file pointer of the open file */
 FRESULT pf_opendir (DIR* dj, const char* path);				/* Open a directory */
 FRESULT pf_readdir (DIR* dj, FILINFO* fno);					/* Read a directory item from the open directory */
 
+FRESULT pf_read_available (UINT* br);
 FRESULT pf_read_async (UINT btr, UINT* br);
 FRESULT pf_read_check (void* buff, UINT btr);
 
+FRESULT pf_write_available (UINT* bw);
 FRESULT pf_write_async (const void* buff, UINT btw, UINT* bw); /* Write data to the open file, non-blocking */
 FRESULT pf_write_check (); 									/* Check for completion of non-blocking write */
 

@@ -909,6 +909,28 @@ FRESULT pf_read (
 	return FR_OK;
 }
 
+FRESULT pf_read_available (
+	UINT* br		/* Pointer to actual number of bytes available to read */
+)
+{
+	DWORD remain;
+	UINT rcnt;
+	FATFS *fs = FatFs;
+
+
+	*br = 0;
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (!(fs->flag & FA_OPENED))		/* Check if opened */
+		return FR_NOT_OPENED;
+
+	remain = fs->fsize - fs->fptr;
+	rcnt = 512 - (UINT)fs->fptr % 512;				/* Get partial sector data from sector buffer */
+	if (rcnt > remain) rcnt = (UINT)remain;			/* Truncate by remaining bytes */
+	*br += rcnt;
+
+	return FR_OK;
+}
+
 FRESULT pf_read_async (
 	UINT btr,		/* Number of bytes to read */
 	UINT* br		/* Pointer to actual number of bytes to read (pass to pf_read_check) */
@@ -1038,6 +1060,35 @@ FRESULT pf_write (
 			fs->flag &= ~FA__WIP;
 		}
 	}
+
+	return FR_OK;
+}
+
+FRESULT pf_write_available (
+	UINT* bw			/* Pointer to number of bytes that can be written */
+)
+{
+	DWORD fptr, remain;
+	UINT wcnt;
+	FATFS *fs = FatFs;
+
+
+	*bw = 0;
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (!(fs->flag & FA_OPENED))		/* Check if opened */
+		return FR_NOT_OPENED;
+	if (fs->flag & FA__FIP)				/* Check if last write finalized */
+		return FR_NOT_READY;
+
+	fptr = fs->fptr;
+	if (!(fs->flag & FA__WIP))		/* Round-down fptr to the sector boundary */
+		fptr &= 0xFFFFFE00;
+
+	remain = fs->fsize - fptr;
+	wcnt = 512 - (UINT)fptr % 512;				/* Number of bytes to write to the sector */
+	if (wcnt > remain) wcnt = (UINT)remain;			/* Truncate btw by remaining bytes */
+	
+	*bw += wcnt;
 
 	return FR_OK;
 }
