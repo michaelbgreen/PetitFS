@@ -1169,7 +1169,20 @@ FRESULT pf_write_check (
 }
 #endif
 
-
+/*-----------------------------------------------------------------------*/
+/* Move file pointer of the open file to a sector boundary               */
+/*-----------------------------------------------------------------------*/
+FRESULT pf_sectoralign (
+)
+{
+	FATFS *fs = FatFs;
+	
+	fs->fptr = (fs->fptr + 511) & -512;
+	if (fs->fptr > fs->fsize) {
+		fs->fptr = fs->fsize;
+	}
+	return FR_OK;
+}
 
 /*-----------------------------------------------------------------------*/
 /* Seek File R/W Pointer                                                 */
